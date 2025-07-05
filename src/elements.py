@@ -114,6 +114,7 @@ class Plane (Enemy):
         self.Q = np.zeros((4, 4))
         self.R = np.zeros((2, 2))
 
+    # KALMAN FILTER TO PREDICT PLANE POSITION
     @Element.position.setter
     def position(self, position):
         # Update the actual position
@@ -123,11 +124,11 @@ class Plane (Enemy):
         z = np.array([[position[0]],
                       [position[1]]])
 
-        # --- Predict ---
+        # Predict
         x_pred = self.A @ self.x_est
         P_pred = self.A @ self.P @ self.A.T + self.Q
 
-        # --- Update ---
+        # Update
         y = z - self.H @ x_pred
         S = self.H @ P_pred @ self.H.T + self.R
         K = P_pred @ self.H.T @ np.linalg.pinv(S)
@@ -135,7 +136,7 @@ class Plane (Enemy):
         self.x_est = x_pred + K @ y
         self.P = (np.eye(4) - K @ self.H) @ P_pred
 
-        # --- Predict X where Y == ground_y ---
+        # Predict X where Y == ground_y
         x_now, y_now, vx, vy = self.x_est.flatten()
         if abs(vy) > 1e-8:
             t_to_ground = (self.ground_y - y_now) / vy

@@ -5,7 +5,8 @@ import os
 import argparse
 
 from bot import Bot
-from controls import Controls
+from controls import Controls, COMMAND_COMBOS
+from qlearning import QLearningAgent
 
 def parse_args():
     parser = argparse.ArgumentParser(description="River Raid Bot Controller")
@@ -20,6 +21,10 @@ def parse_args():
     parser.add_argument(
         "--fps", type=int, default=60,
         help="Game FPS"
+    )
+    parser.add_argument(
+        "--qtable", type=int, default='q_table.pkl',
+        help="Path to the Q Table file (default: q_table.pkl)"
     )
     return parser.parse_args()
 
@@ -60,20 +65,31 @@ def main ():
     game = retro.RetroEmulator(args.rom)
     game_load = load_state(game, args.state)
     controls = Controls()
+    agent = QLearningAgent(COMMAND_COMBOS)
+    agent.load_progress()
+    state = [0] * 12
     bot = Bot(controls, auto_start=game_load)
 
     while True:
+        controls.update_inputs()
+
         # Frame Start
         start_time = time.perf_counter()
         key = cv2.waitKey(1)
 
+        # Decide action based on the current Q-Learning state
+        action_index = agent.choose_action(state) if state is not None else 0
+
         # Display game and refresh bot state
         frame = get_frame(game)
         cv2.imshow("River Raid", frame)
-        bot.refresh(frame)
+
+        # Refresh bot state and get reward to update Q-Learning agent
+        next_state, reward = bot.refresh(frame, COMMAND_COMBOS[action_index])
+        agent.update(state, action_index, reward, next_state)
+        state = next_state
 
         # Update controls + manual input
-        controls.update_inputs()
         controls.process_key(key)
         game.set_button_mask(controls.buttons)
         if controls.save:
@@ -87,7 +103,7 @@ def main ():
         elapsed = time.perf_counter() - start_time
         time.sleep(max(0, 1/args.fps - elapsed))
 
-
+    agent.save_progress()
     cv2.destroyAllWindows()
 
 

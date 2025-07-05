@@ -24,6 +24,18 @@ KEY_MAP = {
     ord('c'): Command.A
 }
 
+COMMAND_COMBOS = [
+    [],
+    [Command.LEFT],
+    [Command.RIGHT],
+    #[Command.UP],
+    #[Command.LEFT, Command.UP],
+    #[Command.RIGHT, Command.UP],
+    [Command.B],
+    #[Command.B, Command.LEFT],
+    #[Command.B, Command.RIGHT],
+]
+
 class Input():
     def __init__(self, command):
         self.command = command

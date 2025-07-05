@@ -18,12 +18,16 @@ class Bot:
         self.started = auto_start
         self.start_time = time.time()
 
-    def refresh(self, frame):
+    def refresh(self, frame, action):
         # Define Region Of Interest
         height, width = frame.shape[:2]
         y_start, y_end = 0, 480
         x_start, x_end = 0, width
         roi = frame[y_start:y_end, x_start:x_end]
+
+        # Clear entities
+        self.fuels = []
+        self.passings = []
 
         # Detect all entities in roi
         self.detect_player(roi)
@@ -33,58 +37,37 @@ class Bot:
         cv2.imshow("Detected Objects", roi)
 
         # Act based on entities
-        self.action()
-
-        # Clear entities
-        self.fuels = []
-        self.passings = []
+        next_state, reward = self.state(action)
+        return next_state, reward
 
     def fire(self):
         if self.controls.manual:
             return
         self.controls.input_commands([Command.B], hold=False)
 
-    def move_to_element(self, element, avoid=False):
-        direction = 1
-        if avoid:
-            direction = -1
-
+    def move(self, command):
         if self.controls.manual:
             return
-        if element.name == "Plane" and avoid is False:
-            return
 
-        if (
-            self.will_move is False
-            and self.player.x_diff(element) * direction > 0
-            and self.player.can_move_right
-        ):
+        if command == Command.RIGHT and self.player.can_move_right:
             self.controls.input_commands([Command.RIGHT])
-            self.will_move = True
-        elif (
-            self.will_move is False
-            and self.player.x_diff(element) * direction < 0
-            and self.player.can_move_left
-        ):
+        elif command == Command.LEFT and self.player.can_move_left:
             self.controls.input_commands([Command.LEFT])
-            self.will_move = True
 
-    def action(self):
-        self.will_move = False
-
-        # Start game
-        if not self.started and time.time() - self.start_time >= 3:
-            self.controls.input_commands([Command.START])
-            self.started = True
-        elif not self.started:
-            return
-
+    def state(self, action):
         aiming_enemy = None
         almost_aiming_enemy = None
         plane_will_crash = None
         enemy_will_crash = None
         should_center_passing = None
         next_fuel = None
+
+        # Start game
+        if not self.started and time.time() - self.start_time >= 4:
+            self.controls.input_commands([Command.START])
+            self.started = True
+        elif not self.started:
+            return ([0] * 12), 1
 
         # Sort enitities based on player position
         self.fuels.sort(key=lambda f: f.position[1], reverse=True)
@@ -118,7 +101,9 @@ class Bot:
                 self.player.is_aligned(enemy, margin=5)
                 and self.player.y_diff(enemy) > 75
             ):
-                almost_aiming_enemy = almost_aiming_enemy if almost_aiming_enemy is not None else enemy
+                almost_aiming_enemy = (
+                    almost_aiming_enemy if almost_aiming_enemy is not None else enemy
+                )
             elif (
                 self.player.y_diff(enemy) < 75
                 and self.player.is_aligned(enemy, margin=25)
@@ -127,7 +112,9 @@ class Bot:
                 and self.player.y_diff(enemy) < 75
                 and self.player.is_aligned(enemy, margin=75)
             ):
-                enemy_will_crash = enemy_will_crash if enemy_will_crash is not None else enemy
+                enemy_will_crash = (
+                    enemy_will_crash if enemy_will_crash is not None else enemy
+                )
 
         for p in self.passings:
             if p.includes(self.player):
@@ -149,27 +136,6 @@ class Bot:
                 should_center_passing = p
             break
 
-        if enemy_will_crash:
-            if should_center_passing is None or (should_center_passing.is_aligned(enemy_will_crash) and should_center_passing.width > enemy_will_crash.width * 2):
-                self.move_to_element(enemy_will_crash, avoid=True)
-                self.controls.input_commands([Command.UP])
-        if should_center_passing:
-            self.move_to_element(should_center_passing)
-        if aiming_enemy:
-            self.move_to_element(aiming_enemy)
-            if aiming_enemy.name != "Plane":
-                self.fire()
-        if almost_aiming_enemy:
-            self.move_to_element(almost_aiming_enemy)
-        if next_fuel:
-            self.move_to_element(next_fuel)
-        if plane_will_crash:
-            self.move_to_element(plane_will_crash, avoid=True)
-            if should_center_passing:
-                self.controls.input_commands([Command.DOWN])
-            else:
-                self.controls.input_commands([Command.UP])
-
         print(f"""
         Aiming Enemy:           {aiming_enemy}
         Almost Aiming Enemy:    {almost_aiming_enemy}
@@ -178,6 +144,41 @@ class Bot:
         Next Fuel:              {next_fuel}
         Plane Will Crash:       {plane_will_crash}
         """)
+
+        base_reward = 1
+        for command in action:
+            if command == Command.B:
+                self.fire()
+                if aiming_enemy is not None:
+                    base_reward += 20
+                else: 
+                    base_reward -= 50
+            elif command == Command.LEFT or command == Command.RIGHT:
+                self.move(command)
+            else: 
+                self.controls.input_commands([command])
+        if not self.player.present and time.time() - self.start_time > 10:
+            print("Player not present, resetting game.")
+            base_reward -= 100
+            self.started = False
+            self.start_time = time.time()
+            self.controls.input_commands([Command.START])
+            return ([0] * 12), base_reward
+
+        rewards = [2, -3, -5, -5, 10, 2]
+
+        return self.createStateUsingLeftRight(
+            [
+                aiming_enemy,
+                almost_aiming_enemy,
+                plane_will_crash,
+                enemy_will_crash,
+                should_center_passing,
+                next_fuel,
+            ],
+            rewards,
+            base_reward
+        )
 
     def detect_objects(self, frame):
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
@@ -334,7 +335,7 @@ class Bot:
         gray_mask = cv2.inRange(hsv, lower_gray, upper_gray)
         outside_mask = cv2.bitwise_or(green_mask, gray_mask)
 
-        # Fill small holes in the green areas using morphological closing
+        # Fill small holes in the outside areas using morphological closing
         kernel = np.ones((20, 20), np.uint8)
         closed_outside = cv2.morphologyEx(outside_mask, cv2.MORPH_CLOSE, kernel)
 
@@ -360,6 +361,7 @@ class Bot:
         if start is not None:
             self.passings.append(Passing(start, len(row) - 1))
 
+    # Update existing entities based on new detections
     def keep_same(self, old, new):
         result = []
         for new_item in new:
@@ -372,3 +374,26 @@ class Bot:
                 match.position = new_item.position
             result.append(match if match else new_item)
         return result
+
+    # Create state based on left/right distance from entities
+    def createStateUsingLeftRight(self, arr, rewards, base_reward):
+        states = []
+        reward = base_reward
+        for i in range(len(arr)):
+            if arr[i] is None:
+                states.append(0)
+                states.append(0)
+            else:
+                diff = self.player.x_diff(arr[i])
+                if diff < 0:
+                    states.append(1)
+                    states.append(0)
+                else:
+                    states.append(0)
+                    states.append(1)
+
+                reward -= rewards[i] * abs(diff) * 0.1
+
+        print(reward)
+        print(states)
+        return states, reward

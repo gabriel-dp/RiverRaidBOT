@@ -23,7 +23,7 @@ def parse_args():
         help="Game FPS"
     )
     parser.add_argument(
-        "--qtable", type=str, default='q_table.pkl',
+        "--qlearning", type=str, default='q_table.pkl',
         help="Path to the Q Table file (default: q_table.pkl)"
     )
     return parser.parse_args()

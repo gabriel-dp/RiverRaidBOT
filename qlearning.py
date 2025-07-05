@@ -3,8 +3,9 @@ import random
 import pickle
 
 class QLearningAgent:
-    def __init__(self, actions, alpha=0.1, gamma=0.9, epsilon=0.1):
+    def __init__(self, file_path, actions, alpha=0.1, gamma=0.9, epsilon=0.1):
         self.Q = {} 
+        self.file_path = file_path
         self.actions = actions
         self.alpha = alpha
         self.gamma = gamma
@@ -30,13 +31,13 @@ class QLearningAgent:
         new_q = current_q + self.alpha * (reward + self.gamma * max_future_q - current_q)
         self.Q[(state_key, action)] = new_q
 
-    def save_progress(self, filename='q_table.pkl'):
-        with open(filename, 'wb') as f:
+    def save_progress(self):
+        with open(self.file_path, 'wb') as f:
             pickle.dump(self.Q, f)
 
-    def load_progress(self, filename='q_table.pkl'):
+    def load_progress(self):
         try:
-            with open(filename, 'rb') as f:
+            with open(self.file_path, 'rb') as f:
                 self.Q = pickle.load(f)
         except FileNotFoundError:
-            print(f"No saved Q-table found at '{filename}'. Starting fresh.")
+            print(f"No saved Q-table found at '{self.file_path}'. Starting fresh.")

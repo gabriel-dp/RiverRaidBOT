@@ -23,7 +23,7 @@ def parse_args():
         help="Game FPS"
     )
     parser.add_argument(
-        "--qtable", type=int, default='q_table.pkl',
+        "--qtable", type=str, default='q_table.pkl',
         help="Path to the Q Table file (default: q_table.pkl)"
     )
     return parser.parse_args()
@@ -65,7 +65,7 @@ def main ():
     game = retro.RetroEmulator(args.rom)
     game_load = load_state(game, args.state)
     controls = Controls()
-    agent = QLearningAgent(COMMAND_COMBOS)
+    agent = QLearningAgent(args.qlearning, COMMAND_COMBOS)
     agent.load_progress()
     state = [0] * 12
     bot = Bot(controls, auto_start=game_load)

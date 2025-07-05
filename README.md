@@ -45,6 +45,7 @@ River Raid is a video game for the Atari 2600 console, created by Carol Shaw in 
     |ROM path|`--rom`|string|`./river-raid.a26`|
     |State path|`--state`|string|none|
     |FPS|`--fps`|int|`60`|
+    |Q-Learning path|`--qlearning`|string|`./qlearning.pck`|
 
     Example defining parameters
 
